@@ -42,5 +42,5 @@ Just enter the word length, fill in known letters, and get a list of possible ma
 We pre-build a positional index from a word list, storing bitmasks for each letter at each position. This lets us quickly filter out impossible words by intersecting bitmasks, making the search blazing fast!
 
 ---
-
+Please run the build.py on a [words.txt](https://github.com/dwyl/english-words/blob/master/words.txt) file. Then play with the main.py
 Made with ❤️ by Ashok Narayan | Happy guessing! 🎉
