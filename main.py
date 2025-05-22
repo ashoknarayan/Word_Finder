@@ -1,241 +1,186 @@
 import pygame
+import sys
 import json
 
 pygame.init()
 
-# Constants
-WIDTH, HEIGHT = 900, 300
-BG_COLOR = (30, 30, 30)
-BOX_COLOR = (200, 200, 200)
-BOX_ACTIVE_COLOR = (255, 255, 255)
-TEXT_COLOR = (240, 240, 240)
-RESULT_BG = (50, 50, 50)
-FONT = pygame.font.SysFont('Consolas', 36)
-SMALL_FONT = pygame.font.SysFont('Consolas', 24)
-INPUT_FONT = pygame.font.SysFont('Consolas', 48)
-
+WIDTH, HEIGHT = 1200, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Word Pattern Solver")
+pygame.display.set_caption("Word Finder")
+
+FONT = pygame.font.SysFont(None, 50)
+SMALL_FONT = pygame.font.SysFont(None, 32)
 
 clock = pygame.time.Clock()
 
-# Load pos_index.json and convert hex bitsets back to int
-def load_pos_index(filename):
-    with open(filename, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    for length in data:
-        lp = data[length]['_letter_pos']
-        for letter in lp:
-            for i in range(int(length)):
-                lp[letter][i] = int(lp[letter][i], 16)
-    return data
+# Load positional index JSON once
+with open('pos_index.json', 'r', encoding='utf-8') as f:
+    pos_index = json.load(f)
 
-pos_index = load_pos_index('pos_index.json')
+def draw_text(surface, text, pos, font=FONT, color=(255,255,255)):
+    text_surface = font.render(text, True, color)
+    surface.blit(text_surface, pos)
 
-# Input Box class
-class InputBox:
-    def __init__(self, x, y, w, h, idx):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.color = BOX_COLOR
-        self.text = ''
-        self.txt_surface = FONT.render(self.text, True, TEXT_COLOR)
-        self.active = False
-        self.idx = idx
+def get_word_length():
+    input_str = ''
+    while True:
+        screen.fill((30, 30, 30))
+        draw_text(screen, "Enter word length (1-20):", (50, 50), SMALL_FONT)
+        draw_text(screen, input_str, (50, 100))
 
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            # Toggle active if clicked
-            if self.rect.collidepoint(event.pos):
-                self.active = True
-            else:
-                self.active = False
-            self.color = BOX_ACTIVE_COLOR if self.active else BOX_COLOR
-        if event.type == pygame.KEYDOWN and self.active:
-            if event.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
-            elif event.unicode.isalpha() and len(self.text) == 0:
-                self.text = event.unicode.lower()
-            self.txt_surface = FONT.render(self.text, True, TEXT_COLOR)
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    if input_str.isdigit():
+                        length = int(input_str)
+                        if 1 <= length <= 20 and str(length) in pos_index:
+                            return length
+                    input_str = ''  # invalid input reset
+                elif event.key == pygame.K_BACKSPACE:
+                    input_str = input_str[:-1]
+                else:
+                    if event.unicode.isdigit():
+                        input_str += event.unicode
+        clock.tick(30)
 
-    def draw(self, screen):
-        # Draw box
-        pygame.draw.rect(screen, self.color, self.rect, 2)
-        # Draw text centered
-        text_rect = self.txt_surface.get_rect(center=self.rect.center)
-        screen.blit(self.txt_surface, text_rect)
-        # Draw index below box
-        idx_surf = SMALL_FONT.render(str(self.idx+1), True, TEXT_COLOR)
-        idx_rect = idx_surf.get_rect(midtop=(self.rect.centerx, self.rect.bottom + 2))
-        screen.blit(idx_surf, idx_rect)
+def input_letters(length):
+    letters = [''] * length
+    selected = 0  # which box is active
 
-# Button class
-class Button:
-    def __init__(self, x, y, w, h, text):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.text = text
-        self.txt_surface = FONT.render(text, True, TEXT_COLOR)
+    box_size = 50
+    spacing = 10
+    total_width = length * box_size + (length - 1) * spacing
+    start_x = (WIDTH - total_width) // 2
+    y = HEIGHT // 3
 
-    def draw(self, screen):
-        pygame.draw.rect(screen, BOX_COLOR, self.rect, border_radius=5)
-        text_rect = self.txt_surface.get_rect(center=self.rect.center)
-        screen.blit(self.txt_surface, text_rect)
+    running = True
+    while running:
+        screen.fill((30,30,30))
+        draw_text(screen, "Type letters you know (use BACKSPACE to clear)", (50, 30), SMALL_FONT)
 
-    def is_clicked(self, pos):
-        return self.rect.collidepoint(pos)
+        # Draw boxes
+        for i in range(length):
+            rect = pygame.Rect(start_x + i*(box_size + spacing), y, box_size, box_size)
+            color = (255, 255, 255) if i == selected else (150, 150, 150)
+            pygame.draw.rect(screen, color, rect, 3)
 
-# Search function using bitset positional index
-def search_words(pattern):
-    length = len(pattern)
-    if length not in pos_index:
+            # Draw letter if present
+            if letters[i]:
+                letter_surf = FONT.render(letters[i].upper(), True, (255,255,255))
+                letter_rect = letter_surf.get_rect(center=rect.center)
+                screen.blit(letter_surf, letter_rect)
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    running = False
+                elif event.key == pygame.K_BACKSPACE:
+                    letters[selected] = ''
+                elif event.key == pygame.K_LEFT:
+                    selected = max(0, selected - 1)
+                elif event.key == pygame.K_RIGHT:
+                    selected = min(length - 1, selected + 1)
+                else:
+                    ch = event.unicode.lower()
+                    if ch.isalpha() and len(ch) == 1:
+                        letters[selected] = ch
+                        if selected < length - 1:
+                            selected += 1
+        clock.tick(30)
+
+    return letters
+
+def find_matching_words(letters):
+    length = len(letters)
+    length_str = str(length)
+    if length_str not in pos_index:
         return []
 
-    words = pos_index[length]['_words']
-    letter_pos = pos_index[length]['_letter_pos']
+    words = pos_index[length_str]['_words']
+    letter_pos = pos_index[length_str]['_letter_pos']
 
-    # Start mask with all bits set (all words possible)
-    mask = (1 << len(words)) - 1
+    n = len(words)
+    full_mask = (1 << n) - 1
+    mask = full_mask
 
-    for i, ch in enumerate(pattern):
-        if ch == '_':
-            continue
-        if ch < 'a' or ch > 'z':
-            # ignore invalid chars
+    for pos, ch in enumerate(letters):
+        if ch == '' or ch == '_':
             continue
         if ch not in letter_pos:
             return []
-        mask &= letter_pos[ch][i]
+        hex_mask = letter_pos[ch][pos]
+        bitset = int(hex_mask, 16)
+        mask &= bitset
         if mask == 0:
             return []
 
-    # Extract matching words from mask
-    results = []
-    for i in range(len(words)):
-        if (mask >> i) & 1:
-            results.append(words[i])
-    return results
+    result = []
+    for i in range(n):
+        if mask & (1 << i):
+            result.append(words[i])
 
-# Screens: Length input, Pattern input, Results display
-def length_screen():
-    input_box = InputBox(WIDTH//2 - 60, HEIGHT//2 - 30, 120, 60, 0)
-    prompt = FONT.render("Enter Word Length (1-30):", True, TEXT_COLOR)
+    return result
 
-    running = True
-    while running:
-        screen.fill(BG_COLOR)
-        screen.blit(prompt, (WIDTH//2 - prompt.get_width()//2, HEIGHT//2 - 100))
+def results_screen(words):
+    scroll_y = 0
+    max_display = (HEIGHT - 120) // 30
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return None
-            input_box.handle_event(event)
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN and input_box.text.isdigit():
-                    length = int(input_box.text)
-                    if 1 <= length <= 30 and str(length) in pos_index:
-                        return length
-
-        input_box.draw(screen)
-        pygame.display.flip()
-        clock.tick(30)
-
-def pattern_screen(length):
-    boxes = []
-    margin = 10
-    box_size = min(60, (WIDTH - (length+1)*margin) // length)
-    start_x = (WIDTH - (box_size * length + margin*(length-1))) // 2
-    y = HEIGHT//2 - box_size//2 - 20
-
-    for i in range(length):
-        box = InputBox(start_x + i*(box_size+margin), y, box_size, box_size, i)
-        boxes.append(box)
-
-    prompt = FONT.render("Fill known letters, leave blank as _ (underscore). Press ENTER to search.", True, TEXT_COLOR)
-
-    search_button = Button(WIDTH//2 - 80, HEIGHT - 80, 160, 50, "Search")
+    button_rect = pygame.Rect(WIDTH - 170, HEIGHT - 70, 150, 50)
 
     running = True
     while running:
-        screen.fill(BG_COLOR)
-        screen.blit(prompt, (WIDTH//2 - prompt.get_width()//2, y - 70))
+        screen.fill((30,30,30))
+        draw_text(screen, f"Found {len(words)} word(s):", (20, 20), SMALL_FONT)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return None
-            for box in boxes:
-                box.handle_event(event)
+        pygame.draw.rect(screen, (70, 130, 180), button_rect)
+        draw_text(screen, "Play Again", (button_rect.x + 20, button_rect.y + 10), SMALL_FONT)
 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    pattern = ''.join(box.text if box.text else '_' for box in boxes)
-                    return pattern
+        start_idx = max(0, scroll_y // 30)
+        display_words = words[start_idx:start_idx + max_display]
 
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if search_button.is_clicked(event.pos):
-                    pattern = ''.join(box.text if box.text else '_' for box in boxes)
-                    return pattern
-
-        for box in boxes:
-            box.draw(screen)
-
-        search_button.draw(screen)
-
-        pygame.display.flip()
-        clock.tick(30)
-
-def results_screen(words, length):
-    running = True
-    play_again_button = Button(WIDTH//2 - 100, HEIGHT - 80, 200, 50, "Play Again")
-
-    # Show max 20 results neatly
-    max_show = 20
-    display_words = words[:max_show]
-
-    title = FONT.render(f"Found {len(words)} words of length {length}:", True, TEXT_COLOR)
-
-    while running:
-        screen.fill(RESULT_BG)
-        screen.blit(title, (WIDTH//2 - title.get_width()//2, 20))
-
-        y = 80
-        line_height = 30
+        y = 60
         for w in display_words:
-            w_surf = SMALL_FONT.render(w, True, TEXT_COLOR)
-            screen.blit(w_surf, (WIDTH//2 - w_surf.get_width()//2, y))
-            y += line_height
+            draw_text(screen, w, (50, y), SMALL_FONT)
+            y += 30
 
-        if len(words) > max_show:
-            more_surf = SMALL_FONT.render(f"... and {len(words)-max_show} more", True, TEXT_COLOR)
-            screen.blit(more_surf, (WIDTH//2 - more_surf.get_width()//2, y))
-            y += line_height
-
-        play_again_button.draw(screen)
+        pygame.display.flip()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if play_again_button.is_clicked(event.pos):
-                    return True
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return True
+                pygame.quit()
+                sys.exit()
 
-        pygame.display.flip()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if button_rect.collidepoint(event.pos):
+                    running = False
+                # Scroll wheel support
+                if event.button == 4:  # scroll up
+                    scroll_y = max(scroll_y - 30, 0)
+                elif event.button == 5:  # scroll down
+                    scroll_y += 30
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+
         clock.tick(30)
 
 def main():
-    running = True
-    while running:
-        length = length_screen()
-        if length is None:
-            break
-        pattern = pattern_screen(length)
-        if pattern is None:
-            break
-        results = search_words(pattern)
-        running = results_screen(results, length)
+    while True:
+        length = get_word_length()
+        letters = input_letters(length)
+        matches = find_matching_words(letters)
+        results_screen(matches)
 
-    pygame.quit()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
